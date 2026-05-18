@@ -6,16 +6,30 @@ import os
 
 app = Flask(__name__)
 
-# Load model
-model = tf.keras.models.load_model("model.h5")
-
 IMG_SIZE = 224
 
+# ----------------------------
+# 🔥 LAZY MODEL LOADING (IMPORTANT FIX)
+# ----------------------------
+model = None
+
+def get_model():
+    global model
+    if model is None:
+        model = tf.keras.models.load_model("model.h5")
+    return model
+
+# ----------------------------
+# Preprocess frame
+# ----------------------------
 def preprocess_frame(frame):
     frame = cv2.resize(frame, (IMG_SIZE, IMG_SIZE))
     frame = frame / 255.0
     return frame
 
+# ----------------------------
+# Routes
+# ----------------------------
 @app.route("/")
 def home():
     return "Deepfake API is running"
@@ -33,7 +47,9 @@ def predict():
     frames = []
 
     count = 0
-    while count < 10:
+
+    # ⚡ LIMIT FRAMES (IMPORTANT FOR RAILWAY)
+    while count < 5:   # reduced from 10 → 5
         ret, frame = cap.read()
         if not ret:
             break
@@ -50,10 +66,13 @@ def predict():
 
     frames = np.array(frames)
 
-    # prediction
+    # ----------------------------
+    # prediction (safe load)
+    # ----------------------------
+    model = get_model()
     preds = model.predict(frames)
-    score = float(np.mean(preds))
 
+    score = float(np.mean(preds))
     result = "FAKE" if score > 0.5 else "REAL"
 
     return jsonify({
@@ -61,5 +80,9 @@ def predict():
         "confidence": score
     })
 
+# ----------------------------
+# Railway safe start
+# ----------------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
